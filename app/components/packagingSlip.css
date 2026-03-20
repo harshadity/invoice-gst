@@ -1,0 +1,54 @@
+/* app/components/packagingSlip.css */
+
+.packaging-slip-root {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e1e3e5;
+  padding: 24px;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color: #202223;
+}
+
+.packaging-slip-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 2px solid #dfe3e8;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.packaging-slip-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.packaging-slip-address {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.packaging-slip-address div {
+  width: 48%;
+}
+
+.packaging-slip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.packaging-slip-table th,
+.packaging-slip-table td {
+  border: 1px solid #e1e3e5;
+  padding: 8px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.packaging-slip-footer {
+  margin-top: 20px;
+  font-size: 13px;
+  text-align: center;
+  color: #6d7175;
+}

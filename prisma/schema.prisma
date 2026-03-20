@@ -1,0 +1,174 @@
+// This is your Prisma schema file
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+/* ===========================
+   SESSION (Shopify)
+=========================== */
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+/* ===========================
+   APP SETTINGS (30+ fields)
+=========================== */
+model AppSettings {
+  id        String   @id @default(uuid())
+  shop      String   @unique
+
+  /* -------- BUSINESS & LEGAL -------- */
+  companyLegalName    String?
+  brandName           String?
+  businessType        String?
+  gstin               String?
+  pan                 String?
+  registeredNumber    String?
+  cin                 String?
+  authorizedSignatory String?
+
+  /* -------- CONTACT -------- */
+  phone          String?
+  whatsapp       String?
+  contactEmail   String?
+  supportEmail   String?
+  website        String?
+  supportTimings String?
+
+  /* -------- ADDRESS -------- */
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  pincode      String?
+  country      String?
+  fullAddress  String?
+
+  /* -------- INVOICE & COMPLIANCE -------- */
+  invoicePrefix        String?
+  invoiceStartNumber   Int     @default(1)
+  defaultTaxPercentage Float   @default(0.0)
+  invoiceFooterLine    String?
+  terms                String?
+  declaration          String?
+
+  /* -------- BRANDING -------- */
+  logoUrl      String?
+  signatureUrl String?
+  brandColor   String?
+  accentColor  String?
+  fontFamily   String?
+
+  /* -------- SOCIAL -------- */
+  facebook  String?
+  twitter   String?
+  instagram String?
+  linkedin  String?
+  youtube   String?
+  pinterest String?
+
+  /* -------- SYSTEM -------- */
+  isVerified Boolean  @default(false)
+  verifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/* ===========================
+   PRODUCT GST
+=========================== */
+model ProductGST {
+  id            String   @id @default(uuid())
+  shop          String
+  productId     String
+  gstPercentage Float    @default(18.0)
+  hsnCode       String?
+  taxCategory   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, productId])
+  @@index([shop])
+}
+
+/* ===========================
+   TEMPLATE CUSTOMIZATION
+=========================== */
+model TemplateCustomization {
+  id             String   @id @default(uuid())
+  shop           String
+  templateType   String   // invoice | packagingSlip | creditNote
+  templateId     String
+  customizations String?  // JSON
+  isActive       Boolean  @default(false)
+  isDeleted      Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, templateType])
+  @@index([shop])
+}
+
+/* ===========================
+   EMAIL AUTOMATION
+=========================== */
+model EmailAutomation {
+  id           String   @id @default(cuid())
+  shop         String
+  enabled      Boolean  @default(false)
+
+  trigger      String   // order_created | order_fulfilled | order_shipped | order_delivered
+  documentType String   // invoice | packagingSlip | creditNote
+  templateId   String
+
+  subject      String
+  message      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, trigger])
+  @@index([shop])
+}
+
+/* ===========================
+   SUBSCRIPTIONS (Billing)
+=========================== */
+model Subscription {
+  id               String   @id @default(uuid())
+  shop             String   @unique
+
+  plan             String   // FREE | STARTUP | BUSINESS | ADVANCED
+  billingCycle     String   // monthly | yearly | none
+  status           String   // active | pending | cancelled | expired
+
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
