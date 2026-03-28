@@ -1,229 +1,221 @@
+
 import { useFetcher, useLoaderData } from "react-router";
-import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
-import { Card, Layout, Page } from "@shopify/polaris";
+import { useState, useMemo } from "react";
+import { TitleBar } from "@shopify/app-bridge-react";
+import {
+  Card,
+  Layout,
+  Page,
+  Filters,
+  ChoiceList,
+} from "@shopify/polaris";
 import OrdersTable from "../components/OrdersTable";
 import { authenticate } from "../shopify.server";
-import { db } from "../db.server";
 
-// DATA LOADER (React Router style)
+/* ---------------- LOADER ---------------- */
+
 export async function loader({ request }) {
-  try {
-    const { admin, session } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
-    const response = await admin.graphql(
-      `#graphql
-      query GetOrders {
-        orders(first: 50, reverse: true) {
-          edges {
-            node {
-              id
-              name
-              createdAt
-              displayFulfillmentStatus
-              displayFinancialStatus
-              currencyCode
-              subtotalPriceSet {
-                shopMoney {
-                  amount
-                  currencyCode
-                }
-              }
-              totalPriceSet {
-                shopMoney {
-                  amount
-                  currencyCode
-                }
-              }
-              totalTaxSet {
-                shopMoney {
-                  amount
-                  currencyCode
-                }
-              }
-              customer {
-                id
-                firstName
-                lastName
-                email
-              }
-              shippingAddress {
-                address1
-                address2
-                city
-                province
-                zip
-                country
-              }
-              totalPriceSet {
-                shopMoney {
-                  amount
-                }
-              }
-              lineItems(first: 5) {
-                edges {
-                  node {
+  const response = await admin.graphql(`
+    query {
+      orders(first: 50, reverse: true) {
+        edges {
+          node {
+            id
+            name
+            createdAt
+            displayFulfillmentStatus
+            displayFinancialStatus
+
+            subtotalPriceSet { shopMoney { amount } }
+            totalTaxSet { shopMoney { amount } }
+            totalPriceSet { shopMoney { amount } }
+
+            customer {
+              firstName
+              lastName
+              email
+            }
+
+            lineItems(first: 20) {
+              edges {
+                node {
+                  title
+                  quantity
+                  originalUnitPriceSet {
+                    shopMoney { amount }
+                  }
+                  taxLines {
                     title
-                    quantity
-                    variantTitle
-                    originalUnitPriceSet {
-                      shopMoney {
-                        amount
-                        currencyCode
-                      }
-                    }
-                    taxLines {
-                      priceSet {
-                        shopMoney {
-                          amount
-                          currencyCode
-                        }
-                      }
-                      rate
-                      title
-                    }
+                    priceSet { shopMoney { amount } }
                   }
                 }
               }
             }
           }
         }
-        shop {
-          name
-          email
-          billingAddress {
-            formatted
-          }
-          taxNumber: metafield(namespace: "company", key: "gstin") {
-            value
-          }
-        }
-      }`
-    );
-
-    const responseJson = await response.json();
-
-    if (responseJson.errors) {
-      throw new Error(responseJson.errors[0].message);
-    }
-
-    // Load app settings from database
-    const settings = await db.appSettings.findUnique({
-      where: { shop: session.shop },
-    });
-
-    // React Router loader just returns plain data
-    return {
-      orders: responseJson.data.orders.edges,
-      shop: responseJson.data.shop,
-      settings: settings || null,
-    };
-  } catch (error) {
-    console.error("Loader error:", error);
-    throw new Response("Error loading orders", { status: 500 });
-  }
-}
-
-// ACTION (React Router style)
-export async function action({ request }) {
-  try {
-    const { admin } = await authenticate.admin(request);
-    const formData = await request.formData();
-
-    const orderId = formData.get("orderId");
-    const email = formData.get("email");
-
-    if (!orderId || !email) {
-      return { error: "Missing required fields" };
-    }
-
-    const response = await admin.graphql(
-      `#graphql
-      mutation orderInvoiceSend($id: ID!, $email: EmailInput!) {
-        orderInvoiceSend(id: $id, email: $email) {
-          userErrors {
-            field
-            message
-          }
-          order {
-            id
-          }
-        }
-      }`,
-      {
-        variables: {
-          id: orderId,
-          email: {
-            to: email,
-            subject: "Your Order Invoice",
-            customMessage: "Thank you for your order!",
-          },
-        },
       }
-    );
-
-    const responseJson = await response.json();
-
-    if (responseJson.errors) {
-      return { error: responseJson.errors[0].message };
+      shop { name }
     }
+  `);
 
-    if (responseJson.data?.orderInvoiceSend?.userErrors?.length > 0) {
-      return {
-        error: responseJson.data.orderInvoiceSend.userErrors[0].message,
-      };
-    }
+  const json = await response.json();
 
-    return { success: true };
-  } catch (error) {
-    console.error("Action error:", error);
-    return {
-      error: "Failed to send invoice. Please try again.",
-    };
-  }
+  return {
+    orders: json.data.orders.edges,
+    shop: json.data.shop,
+  };
 }
+
+/* ---------------- ACTION ---------------- */
+
+export async function action({ request }) {
+  const { admin } = await authenticate.admin(request);
+  const formData = await request.formData();
+
+  await admin.graphql(
+    `#graphql
+    mutation orderInvoiceSend($id: ID!, $email: EmailInput!) {
+      orderInvoiceSend(id: $id, email: $email) {
+        userErrors { message }
+      }
+    }`,
+    {
+      variables: {
+        id: formData.get("orderId"),
+        email: {
+          to: formData.get("email"),
+          subject: formData.get("subject"),
+          customMessage: formData.get("message"),
+        },
+      },
+    }
+  );
+
+  return { success: true };
+}
+
+/* ---------------- COMPONENT ---------------- */
 
 export default function OrdersPage() {
-  const { orders, shop, settings } = useLoaderData();
+  const { orders, shop } = useLoaderData();
   const fetcher = useFetcher();
-  const app = useAppBridge();
 
-  const sendInvoice = (orderId, customerEmail) => {
-    if (!orderId || !customerEmail) {
-      console.log("Missing order ID or customer email");
-      return;
-    }
+  const [queryValue, setQueryValue] = useState("");
+  const [dateRange, setDateRange] = useState([]);
+  const [paymentStatus, setPaymentStatus] = useState([]);
+  const [fulfillmentStatus, setFulfillmentStatus] = useState([]);
 
-    console.log(
-      "Sending invoice for order ID:",
-      orderId,
-      "to customer email:",
-      customerEmail
-    );
+  const filteredOrders = useMemo(() => {
+    return orders.filter(({ node }) => {
+      const search = queryValue.toLowerCase();
 
-    fetcher.submit(
-      {
-        orderId,
-        email: customerEmail,
-      },
-      { method: "POST" }
-    );
+      let matchesDate = true;
+      if (dateRange.length > 0) {
+        const days = parseInt(dateRange[0], 10);
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        matchesDate = new Date(node.createdAt) >= cutoff;
+      }
+
+      const matchesPayment =
+        paymentStatus.length === 0 ||
+        paymentStatus.includes(node.displayFinancialStatus);
+
+      const matchesFulfillment =
+        fulfillmentStatus.length === 0 ||
+        fulfillmentStatus.includes(node.displayFulfillmentStatus);
+
+      return (
+        node.name.toLowerCase().includes(search) &&
+        matchesDate &&
+        matchesPayment &&
+        matchesFulfillment
+      );
+    });
+  }, [orders, queryValue, dateRange, paymentStatus, fulfillmentStatus]);
+
+  const sendInvoice = (data) => {
+    fetcher.submit(data, { method: "POST" });
   };
 
   return (
     <Page>
       <TitleBar title="Orders" />
+
       <Layout>
+
+        <Layout.Section>
+          <Card>
+            <Filters
+              queryValue={queryValue}
+              filters={[
+                {
+                  key: "date",
+                  label: "Date",
+                  filter: (
+                    <ChoiceList
+                      choices={[
+                        { label: "Last 7 days", value: "7" },
+                        { label: "Last 30 days", value: "30" },
+                        { label: "Last 90 days", value: "90" },
+                      ]}
+                      selected={dateRange}
+                      onChange={setDateRange}
+                    />
+                  ),
+                },
+                {
+                  key: "payment",
+                  label: "Payment",
+                  filter: (
+                    <ChoiceList
+                      choices={[
+                        { label: "Paid", value: "PAID" },
+                        { label: "Pending", value: "PENDING" },
+                        { label: "Refunded", value: "REFUNDED" },
+                      ]}
+                      selected={paymentStatus}
+                      onChange={setPaymentStatus}
+                      allowMultiple
+                    />
+                  ),
+                },
+                {
+                  key: "fulfillment",
+                  label: "Fulfillment",
+                  filter: (
+                    <ChoiceList
+                      choices={[
+                        { label: "Fulfilled", value: "FULFILLED" },
+                        { label: "Unfulfilled", value: "UNFULFILLED" },
+                        { label: "Partial", value: "PARTIALLY_FULFILLED" },
+                      ]}
+                      selected={fulfillmentStatus}
+                      onChange={setFulfillmentStatus}
+                      allowMultiple
+                    />
+                  ),
+                },
+              ]}
+              onQueryChange={setQueryValue}
+            />
+          </Card>
+        </Layout.Section>
+
         <Layout.Section>
           <Card>
             <OrdersTable
-              orders={orders}
+              orders={filteredOrders}
               shop={shop}
-              settings={settings}
               onSendInvoice={sendInvoice}
             />
           </Card>
         </Layout.Section>
+
       </Layout>
     </Page>
   );
 }
+

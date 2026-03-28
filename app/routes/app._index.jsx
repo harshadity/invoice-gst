@@ -8,7 +8,6 @@ import {
   InlineStack,
   ButtonGroup,
   Button,
-  Divider,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useLoaderData } from "react-router";
@@ -17,10 +16,6 @@ import { authenticate } from "../shopify.server";
 
 import RevenueChart from "../components/RevenueChart";
 import GstChart from "../components/GstChart";
-import TopProducts from "../components/TopProducts";
-import EmailStats from "../components/EmailStats";
-import SmartInsights from "../components/SmartInsights";
-import OrderFunnel from "../components/OrderFunnel";
 
 /* ---------------- LOADER ---------------- */
 
@@ -29,39 +24,27 @@ export async function loader({ request }) {
 
   let orders = [];
 
-  const query = `
-    query {
-      orders(first: 30, reverse: true) {
-        edges {
-          node {
-            id
-            createdAt
-            currentTotalPriceSet {
-              shopMoney {
-                amount
-              }
-            }
-            totalTaxSet {
-              shopMoney {
-                amount
-              }
-            }
-            lineItems(first: 5) {
-              edges {
-                node {
-                  title
-                  quantity
+  try {
+    const response = await admin.graphql(`
+      query {
+        orders(first: 30, reverse: true) {
+          edges {
+            node {
+              id
+              createdAt
+              currentTotalPriceSet { shopMoney { amount } }
+              totalTaxSet { shopMoney { amount } }
+              lineItems(first: 5) {
+                edges {
+                  node { title quantity }
                 }
               }
             }
           }
         }
       }
-    }
-  `;
+    `);
 
-  try {
-    const response = await admin.graphql(query);
     const json = await response.json();
 
     orders = json.data.orders.edges.map(({ node }) => ({
@@ -71,8 +54,8 @@ export async function loader({ request }) {
       gst: Number(node.totalTaxSet.shopMoney.amount || 0),
       items: node.lineItems.edges.map((i) => i.node),
     }));
-  } catch (error) {
-    console.error("GraphQL error:", error);
+  } catch (e) {
+    console.error(e);
   }
 
   return { orders };
@@ -82,22 +65,19 @@ export async function loader({ request }) {
 
 export default function Dashboard() {
   const { orders } = useLoaderData();
+
   const [range, setRange] = useState(7);
 
   const filteredOrders = [...orders].slice(0, range).reverse();
 
   const revenue = filteredOrders.reduce((s, o) => s + o.revenue, 0);
-  const gst = filteredOrders.reduce((s, o) => s + o.gst, 0);
+  const gstTotal = filteredOrders.reduce((s, o) => s + o.gst, 0);
 
   const formatINR = (num) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
     }).format(num);
-
-  const kpiHeight = { minHeight: "140px" };
-  const normalHeight = { minHeight: "240px" };
-  const chartHeight = { minHeight: "320px" };
 
   return (
     <Page title="Dashboard" fullWidth>
@@ -106,7 +86,6 @@ export default function Dashboard() {
       <Layout>
 
         {/* HEADER */}
-
         <Layout.Section>
           <Card>
             <Box padding="400">
@@ -129,11 +108,10 @@ export default function Dashboard() {
           </Card>
         </Layout.Section>
 
-        {/* KPI CARDS */}
-
+        {/* KPI */}
         <Layout.Section variant="oneThird">
           <Card>
-            <Box padding="400" style={kpiHeight}>
+            <Box padding="400">
               <Text tone="subdued">Revenue</Text>
               <Text variant="headingLg">{formatINR(revenue)}</Text>
             </Box>
@@ -142,16 +120,16 @@ export default function Dashboard() {
 
         <Layout.Section variant="oneThird">
           <Card>
-            <Box padding="400" style={kpiHeight}>
-              <Text tone="subdued">GST Collected</Text>
-              <Text variant="headingLg">{formatINR(gst)}</Text>
+            <Box padding="400">
+              <Text tone="subdued">GST</Text>
+              <Text variant="headingLg">{formatINR(gstTotal)}</Text>
             </Box>
           </Card>
         </Layout.Section>
 
         <Layout.Section variant="oneThird">
           <Card>
-            <Box padding="400" style={kpiHeight}>
+            <Box padding="400">
               <Text tone="subdued">Orders</Text>
               <Text variant="headingLg">{filteredOrders.length}</Text>
             </Box>
@@ -159,65 +137,18 @@ export default function Dashboard() {
         </Layout.Section>
 
         {/* CHARTS */}
-
         <Layout.Section variant="oneHalf">
           <Card>
-            <Box padding="400" style={chartHeight}>
-              <Text variant="headingMd">Revenue Trend</Text>
-              <Divider />
-              <Box paddingBlockStart="300">
-                <RevenueChart orders={filteredOrders} />
-              </Box>
+            <Box padding="400">
+              <RevenueChart orders={filteredOrders} />
             </Box>
           </Card>
         </Layout.Section>
 
         <Layout.Section variant="oneHalf">
           <Card>
-            <Box padding="400" style={chartHeight}>
-              <Text variant="headingMd">GST Trend</Text>
-              <Divider />
-              <Box paddingBlockStart="300">
-                <GstChart orders={filteredOrders} />
-              </Box>
-            </Box>
-          </Card>
-        </Layout.Section>
-
-        {/* INSIGHTS */}
-
-        <Layout.Section variant="oneHalf">
-          <Card>
-            <Box padding="400" style={normalHeight}>
-              <SmartInsights orders={filteredOrders} />
-            </Box>
-          </Card>
-        </Layout.Section>
-
-        <Layout.Section variant="oneHalf">
-          <Card>
-            <Box padding="400" style={normalHeight}>
-              <OrderFunnel orders={filteredOrders} />
-            </Box>
-          </Card>
-        </Layout.Section>
-
-        {/* PRODUCTS */}
-
-        <Layout.Section variant="oneHalf">
-          <Card>
-            <Box padding="400" style={normalHeight}>
-              <TopProducts orders={filteredOrders} />
-            </Box>
-          </Card>
-        </Layout.Section>
-
-        {/* EMAIL */}
-
-        <Layout.Section variant="oneHalf">
-          <Card>
-            <Box padding="400" style={normalHeight}>
-              <EmailStats />
+            <Box padding="400">
+              <GstChart orders={filteredOrders} />
             </Box>
           </Card>
         </Layout.Section>
@@ -226,4 +157,3 @@ export default function Dashboard() {
     </Page>
   );
 }
-

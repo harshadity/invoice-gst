@@ -37,6 +37,7 @@ model Session {
 model AppSettings {
   id        String   @id @default(uuid())
   shop      String   @unique
+  isOnboarded   Boolean @default(false)  
 
   /* -------- BUSINESS & LEGAL -------- */
   companyLegalName    String?
